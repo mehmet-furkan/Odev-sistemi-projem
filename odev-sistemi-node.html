@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ödev Teslim Sistemi (Node.js)</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Inter Font Ailesi -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Modalların varsayılan olarak gizli olması için */
+        .modal {
+            display: none;
+        }
+        .modal-backdrop {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <!-- Header -->
+    <header class="bg-white shadow-md">
+        <nav class="container mx-auto px-6 py-4 flex flex-col sm:flex-row justify-between items-center">
+            <h1 class="text-2xl font-bold text-blue-600">
+                Bilgisayar Bilimlerine Giriş - Ödev Sistemi 
+            </h1>
+            <div class="flex flex-col sm:flex-row items-center space-y-2 sm:space-y-0 sm:space-x-6 mt-4 sm:mt-0">
+                <!-- Rol Değiştirici -->
+                <div class="flex items-center space-x-4">
+                    <span class="font-medium">Görünüm:</span>
+                    <label class="flex items-center">
+                        <input type="radio" name="role" value="student" class="form-radio text-blue-600" checked>
+                        <span class="ml-2">Öğrenci</span>
+                    </label>
+                    <label class="flex items-center">
+                        <input type="radio" name="role" value="professor" class="form-radio text-blue-600">
+                        <span class="ml-2">Öğretim Görevlisi</span>
+                    </label>
+                </div>
+                <!-- Kullanıcı ID Göstergesi KALDIRILDI (Artık Auth yok) -->
+            </div>
+        </nav>
+    </header>
+
+    <!-- Ana İçerik -->
+    <main class="container mx-auto p-6">
+
+        <!-- Yükleniyor... -->
+        <div id="loading" class="text-center py-10">
+            <p class="text-lg font-medium text-gray-600">Sistem yükleniyor...</p>
+        </div>
+
+        <!-- Ödev Listesi Alanı -->
+        <div id="dashboard-content" class="hidden">
+            <!-- Öğretmen Görünümü: Yeni Ödev Butonu -->
+            <div id="professor-actions" class="professor-view hidden mb-6 text-right">
+                <button id="show-create-assignment-modal" class="bg-blue-600 text-white font-medium py-2 px-6 rounded-lg shadow-md hover:bg-blue-700 transition duration-300">
+                    Yeni Ödev Oluştur
+                </button>
+            </div>
+
+            <!-- Ödev Listesi -->
+            <div id="assignment-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Ödev kartları buraya JS ile eklenecek -->
+            </div>
+        </div>
+
+    </main>
+
+    <!-- 1. Yeni Ödev Oluşturma Modalı (Öğretmen) -->
+    <div id="create-assignment-modal" class="modal fixed inset-0 z-50 overflow-auto">
+        <div id="create-assignment-backdrop" class="modal-backdrop fixed inset-0 bg-black bg-opacity-50"></div>
+        <div class="relative p-8 bg-white w-full max-w-lg mx-auto mt-20 rounded-lg shadow-xl">
+            <h3 class="text-2xl font-semibold mb-6">Yeni Ödev Oluştur</h3>
+            <form id="create-assignment-form">
+                <div class="mb-4">
+                    <label for="assignment-title" class="block text-sm font-medium text-gray-700 mb-1">Ödev Başlığı</label>
+                    <input type="text" id="assignment-title" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+                <div class="mb-4">
+                    <label for="assignment-desc" class="block text-sm font-medium text-gray-700 mb-1">Açıklama</label>
+                    <textarea id="assignment-desc" rows="4" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
+                </div>
+                <div class="mb-6">
+                    <label for="assignment-due-date" class="block text-sm font-medium text-gray-700 mb-1">Teslim Tarihi</label>
+                    <input type="date" id="assignment-due-date" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+                <div class="flex justify-end space-x-4">
+                    <button type="button" id="cancel-create-assignment" class="bg-gray-200 text-gray-700 font-medium py-2 px-6 rounded-lg hover:bg-gray-300 transition duration-300">İptal</button>
+                    <button type="submit" class="bg-blue-600 text-white font-medium py-2 px-6 rounded-lg shadow-md hover:bg-blue-700 transition duration-300">Oluştur</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 2. Ödev Teslim Modalı (Öğrenci) -->
+    <!-- Not: Dosya yükleme (storage) olmadığı için bunu link/metin'e geri döndürdük -->
+    <div id="submit-assignment-modal" class="modal fixed inset-0 z-50 overflow-auto">
+        <div id="submit-assignment-backdrop" class="modal-backdrop fixed inset-0 bg-black bg-opacity-50"></div>
+        <div class="relative p-8 bg-white w-full max-w-lg mx-auto mt-20 rounded-lg shadow-xl">
+            <h3 class="text-2xl font-semibold mb-2">Ödev Teslim Et</h3>
+            <p id="submit-modal-title" class="text-lg text-gray-600 mb-6"></p>
+            <form id="submit-assignment-form" data-assignment-id="">
+                <div class="mb-4">
+                    <label for="student-name" class="block text-sm font-medium text-gray-700 mb-1">Adınız Soyadınız</label>
+                    <input type="text" id="student-name" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                </div>
+                <div class="mb-6">
+                    <label for="submission-link" class="block text-sm font-medium text-gray-700 mb-1">Teslimat (GitHub Linki, Metin, vb.)</label>
+                    <input type="file" id="submission-file" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" required>
+                    <p class="text-xs text-gray-500 mt-1">Lütfen GitHub/Google Drive linkinizi veya metin cevabınızı girin.</p>
+                </div>
+                <div class="flex justify-end space-x-4">
+                    <button type="button" id="cancel-submit-assignment" class="bg-gray-200 text-gray-700 font-medium py-2 px-6 rounded-lg hover:bg-gray-300 transition duration-300">İptal</button>
+                    <button type="submit" id="submit-assignment-btn" class="bg-green-600 text-white font-medium py-2 px-6 rounded-lg shadow-md hover:bg-green-700 transition duration-300 w-32 text-center">
+                        Teslim Et
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 3. Teslimleri Görüntüleme Modalı (Öğretmen) -->
+    <div id="view-submissions-modal" class="modal fixed inset-0 z-50 overflow-auto">
+        <div id="view-submissions-backdrop" class="modal-backdrop fixed inset-0 bg-black bg-opacity-50"></div>
+        <div class="relative p-8 bg-white w-full max-w-2xl mx-auto mt-20 rounded-lg shadow-xl">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-2xl font-semibold">Ödev Teslimleri</h3>
+                <button type="button" id="close-view-submissions" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+            </div>
+            <p id="view-modal-title" class="text-lg text-gray-600 mb-6"></p>
+            <div class="max-h-96 overflow-y-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Öğrenci Adı</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim İçeriği</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Teslim Zamanı</th>
+                        </tr>
+                    </thead>
+                    <tbody id="submissions-table-body" class="bg-white divide-y divide-gray-200">
+                        <!-- Teslimler buraya eklenecek -->
+                    </tbody>
+                </table>
+                <div id="no-submissions" class="text-center py-6 text-gray-500 hidden">
+                    Henüz teslim yapan öğrenci yok.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 4. Silme Onay Modalı (Öğretmen) -->
+    <div id="delete-confirm-modal" class="modal fixed inset-0 z-50 overflow-auto">
+        <div id="delete-confirm-backdrop" class="modal-backdrop fixed inset-0 bg-black bg-opacity-50"></div>
+        <div class="relative p-8 bg-white w-full max-w-md mx-auto mt-20 rounded-lg shadow-xl">
+            <h3 class="text-2xl font-semibold mb-4 text-red-600">Ödevi Sil</h3>
+            <p id="delete-confirm-text" class="text-gray-700 mb-6">Bu ödevi silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</p>
+            <div class="flex justify-end space-x-4">
+                <button type="button" id="cancel-delete" class="bg-gray-200 text-gray-700 font-medium py-2 px-6 rounded-lg hover:bg-gray-300 transition duration-300">İptal</button>
+                <button type="button" id="confirm-delete-btn" class="bg-red-600 text-white font-medium py-2 px-6 rounded-lg shadow-md hover:bg-red-700 transition duration-300">
+                    Evet, Sil
+                </button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Firebase SDK'leri SİLİNDİ. Sadece normal <script> etiketi kaldı. -->
+    <script>
+        // --- Global Değişkenler ---
+        // Artık Firebase (app, db, auth, storage) yok.
+        let userId = 'student-123'; // Şimdilik sahte bir ID
+        let currentView = 'student';
+        let assignments = []; // Ödevlerin lokal kopyası
+        let submissions = []; // Teslimlerin lokal kopyası
+
+        // --- Sunucu Adresi ---
+        // Kendi backend sunucumuzun adresi
+        const API_BASE_URL = 'http://localhost:3000/api';
+
+        // --- DOM Elementleri ---
+        const loadingEl = document.getElementById('loading');
+        const dashboardContentEl = document.getElementById('dashboard-content');
+        const assignmentListEl = document.getElementById('assignment-list');
+        const professorActionsEl = document.getElementById('professor-actions');
+
+        // Modal Elementleri
+        const createAssignmentModal = document.getElementById('create-assignment-modal');
+        const submitAssignmentModal = document.getElementById('submit-assignment-modal');
+        const viewSubmissionsModal = document.getElementById('view-submissions-modal');
+        const deleteConfirmModal = document.getElementById('delete-confirm-modal');
+        const submissionsTableBody = document.getElementById('submissions-table-body');
+        const noSubmissionsEl = document.getElementById('no-submissions');
+
+        // --- Modal Kontrol Fonksiyonları ---
+        function showModal(modal) {
+            modal.style.display = 'block';
+            modal.querySelector('.modal-backdrop').style.display = 'block';
+        }
+        function hideModal(modal) {
+            modal.style.display = 'none';
+            modal.querySelector('.modal-backdrop').style.display = 'none';
+        }
+
+        // --- Veri Yükleme (KENDİ SUNUCUMUZDAN) ---
+        // Firebase'in 'onSnapshot' (real-time) özelliği yerine 'fetch' (manuel istek) kullanacağız.
+        async function loadData() {
+            console.log("Veriler kendi sunucumuzdan isteniyor...");
+            loadingEl.style.display = 'none';
+            dashboardContentEl.classList.remove('hidden');
+
+            try {
+                // 1. Ödevleri sunucudan iste (GET isteği)
+                const assignmentsResponse = await fetch(`${API_BASE_URL}/assignments`);
+                if (!assignmentsResponse.ok) throw new Error('Ödevler alınamadı.');
+                assignments = await assignmentsResponse.json();
+                
+                console.log("Ödevler sunucudan alındı:", assignments);
+
+                // 2. Teslimleri sunucudan iste (GET isteği)
+                const submissionsResponse = await fetch(`${API_BASE_URL}/submissions`);
+                if (!submissionsResponse.ok) throw new Error('Teslimler alınamadı.');
+                submissions = await submissionsResponse.json();
+                
+                console.log("Teslimler sunucudan alındı:", submissions);
+
+                // Arayüzü gelen bu verilerle çizdir
+                renderDashboard();
+            } catch (error) {
+                console.error("Veri yükleme hatası:", error);
+                loadingEl.textContent = "Backend sunucusuna (server.js) bağlanılamadı. Çalıştığından emin misiniz?";
+            }
+        }
+
+        // --- Arayüzü Çizdirme (Render) Fonksiyonları ---
+        // (Bu fonksiyonlar Firebase'siz versiyon ile neredeyse aynı)
+
+        function renderDashboard() {
+            if (!dashboardContentEl) return;
+
+            // 1. Rol görünürlüğünü ayarla
+            const professorViews = document.querySelectorAll('.professor-view');
+            const studentViews = document.querySelectorAll('.student-view');
+
+            if (currentView === 'professor') {
+                professorActionsEl.classList.remove('hidden');
+                professorViews.forEach(el => el.style.display = 'block');
+                studentViews.forEach(el => el.style.display = 'none');
+            } else {
+                professorActionsEl.classList.add('hidden');
+                professorViews.forEach(el => el.style.display = 'none');
+                studentViews.forEach(el => el.style.display = 'block');
+            }
+            renderAssignments();
+        }
+
+        function renderAssignments() {
+            assignmentListEl.innerHTML = ''; 
+
+            if (assignments.length === 0) {
+                assignmentListEl.innerHTML = `<p class="text-gray-500 col-span-full text-center">Sunucuda ödev yok.</p>`;
+                return;
+            }
+
+            assignments.forEach(assignment => {
+                const card = createAssignmentCard(assignment);
+                assignmentListEl.appendChild(card);
+            });
+        }
+
+        function createAssignmentCard(assignment) {
+            const card = document.createElement('div');
+            card.className = 'bg-white rounded-lg shadow-lg p-6 flex flex-col justify-between transition-shadow duration-300 hover:shadow-xl';
+
+            // Teslimatı kontrol et (Artık sahte userId ile)
+            const mySubmission = submissions.find(s => s.assignmentId === assignment.id); // Basit kontrol
+            const formattedDueDate = new Date(assignment.dueDate).toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' });
+
+            let statusHTML = '';
+            if (mySubmission) {
+                statusHTML = `
+                    <div class="student-view mt-4 pt-4 border-t border-gray-100">
+                        <span class="text-sm font-medium text-green-600 bg-green-100 px-3 py-1 rounded-full">
+                            Teslim Edildi
+                        </span>
+                        <p class="text-xs text-gray-500 mt-2 truncate">Teslim: 
+                            <span class="text-gray-700">${mySubmission.submissionLink}</span>
+                        </p>
+                    </div>
+                `;
+            } else {
+                statusHTML = `
+                    <div class="student-view mt-4 pt-4 border-t border-gray-100 text-right">
+                        <button class="submit-btn bg-blue-500 text-white font-medium py-2 px-5 rounded-lg hover:bg-blue-600 transition duration-300" 
+                                data-id="${assignment.id}" 
+                                data-title="${assignment.title}">
+                            Teslim Et
+                        </button>
+                    </div>
+                `;
+            }
+
+            const professorHTML = `
+                <div class="professor-view mt-4 pt-4 border-t border-gray-100 flex justify-between items-center">
+                    <button class="view-submissions-btn text-sm text-blue-600 font-medium hover:underline" 
+                            data-id="${assignment.id}" 
+                            data-title="${assignment.title}">
+                        Teslimleri Gör
+                    </button>
+                    <button class="delete-assignment-btn text-sm text-red-500 font-medium hover:text-red-700"
+                            data-id="${assignment.id}">
+                        Sil
+                    </button>
+                </div>
+            `;
+
+            card.innerHTML = `
+                <div>
+                    <h3 class="text-xl font-semibold text-gray-800">${assignment.title}</h3>
+                    <p class="text-sm text-gray-500 mt-1 mb-3">Son Teslim: ${formattedDueDate}</p>
+                    <p class="text-gray-700 text-sm">${assignment.description || 'Açıklama yok.'}</p>
+                </div>
+                <div>
+                    ${statusHTML}
+                    ${professorHTML}
+                </div>
+            `;
+            
+            if (currentView === 'professor') {
+                card.querySelector('.professor-view').style.display = 'flex';
+                card.querySelector('.student-view').style.display = 'none';
+            } else {
+                card.querySelector('.professor-view').style.display = 'none';
+                card.querySelector('.student-view').style.display = 'block';
+            }
+            return card;
+        }
+
+        // --- Event Listeners ---
+        function setupEventListeners() {
+            document.querySelectorAll('input[name="role"]').forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    currentView = e.target.value;
+                    renderDashboard();
+                });
+            });
+
+            document.getElementById('show-create-assignment-modal').addEventListener('click', () => {
+                showModal(createAssignmentModal);
+            });
+
+            assignmentListEl.addEventListener('click', (e) => {
+                if (e.target.classList.contains('submit-btn')) {
+                    const assignmentId = e.target.dataset.id;
+                    const assignmentTitle = e.target.dataset.title;
+                    document.getElementById('submit-modal-title').textContent = assignmentTitle;
+                    document.getElementById('submit-assignment-form').dataset.assignmentId = assignmentId;
+                    showModal(submitAssignmentModal);
+                }
+
+                if (e.target.classList.contains('view-submissions-btn')) {
+                    const assignmentId = e.target.dataset.id;
+                    const assignmentTitle = e.target.dataset.title;
+                    document.getElementById('view-modal-title').textContent = `${assignmentTitle} için teslimler:`;
+                    populateSubmissionsTable(assignmentId);
+                    showModal(viewSubmissionsModal);
+                }
+
+                if (e.target.classList.contains('delete-assignment-btn')) {
+                    const assignmentId = e.target.dataset.id;
+                    const assignmentTitle = e.target.closest('.bg-white').querySelector('h3').textContent;
+                    
+                    document.getElementById('delete-confirm-text').textContent = `"${assignmentTitle}" başlıklı ödevi silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`;
+                    document.getElementById('confirm-delete-btn').dataset.id = assignmentId;
+                    showModal(deleteConfirmModal);
+                }
+            });
+
+            // Modalları Kapat
+            document.getElementById('cancel-create-assignment').addEventListener('click', () => hideModal(createAssignmentModal));
+            document.getElementById('create-assignment-backdrop').addEventListener('click', () => hideModal(createAssignmentModal));
+            document.getElementById('cancel-submit-assignment').addEventListener('click', () => hideModal(submitAssignmentModal));
+            document.getElementById('submit-assignment-backdrop').addEventListener('click', () => hideModal(submitAssignmentModal));
+            document.getElementById('close-view-submissions').addEventListener('click', () => hideModal(viewSubmissionsModal));
+            document.getElementById('view-submissions-backdrop').addEventListener('click', () => hideModal(viewSubmissionsModal));
+            document.getElementById('cancel-delete').addEventListener('click', () => hideModal(deleteConfirmModal));
+            document.getElementById('delete-confirm-backdrop').addEventListener('click', () => hideModal(deleteConfirmModal));
+
+            // Form Gönderme
+            document.getElementById('create-assignment-form').addEventListener('submit', handleCreateAssignment);
+            document.getElementById('submit-assignment-form').addEventListener('submit', handleSubmitAssignment);
+            document.getElementById('confirm-delete-btn').addEventListener('click', (e) => {
+                const assignmentId = e.target.dataset.id;
+                if (assignmentId) {
+                    handleDeleteAssignment(assignmentId);
+                }
+            });
+        }
+
+        // --- Teslim Tablosunu Doldurma ---
+        function populateSubmissionsTable(assignmentId) {
+            submissionsTableBody.innerHTML = '';
+            const relevantSubmissions = submissions.filter(s => s.assignmentId === assignmentId);
+
+            if (relevantSubmissions.length === 0) {
+                noSubmissionsEl.classList.remove('hidden');
+                return;
+            }
+            
+            noSubmissionsEl.classList.add('hidden');
+            relevantSubmissions.forEach(sub => {
+                const formattedTime = new Date(sub.submissionTime).toLocaleString('tr-TR');
+                const row = `
+                    <tr class="hover:bg-gray-50">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${sub.studentName}</td>
+                        <td class="px-6 py-4 text-sm text-gray-700" style="word-break: break-word;">
+                            <a href="${sub.submissionLink}" target="_blank" class="text-blue-600 hover:underline">${sub.submissionLink}</a>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${formattedTime}</td>
+                    </tr>
+                `;
+                submissionsTableBody.innerHTML += row;
+            });
+        }
+
+
+        // --- Eylem Fonksiyonları (Artık KENDİ SUNUCUMUZA istek atacak) ---
+
+        // (Öğretmen) Yeni Ödev Oluştur
+        async function handleCreateAssignment(e) {
+            e.preventDefault();
+            const title = document.getElementById('assignment-title').value;
+            const description = document.getElementById('assignment-desc').value;
+            const dueDate = document.getElementById('assignment-due-date').value;
+
+            if (!title || !dueDate) return;
+
+            try {
+                // Sunucuya POST isteği at, gövdesinde (body) JSON olarak yeni ödevi gönder
+                const response = await fetch(`${API_BASE_URL}/assignments`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json', // Ne gönderdiğimizi söylüyoruz
+                    },
+                    body: JSON.stringify({
+                        title: title,
+                        description: description,
+                        dueDate: dueDate
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Sunucu ödevi oluşturamadı.');
+                }
+                
+                console.log("Ödev sunucuda oluşturuldu.");
+                hideModal(createAssignmentModal);
+                e.target.reset();
+                loadData(); // Arayüzü güncellemek için sunucudan tüm veriyi yeniden çek
+            } catch (error) {
+                console.error("Ödev oluşturma hatası: ", error);
+            }
+        }
+        
+        // (Öğretmen) Ödevi Sil
+        async function handleDeleteAssignment(assignmentId) {
+            console.log(`Ödev sunucudan siliniyor: ${assignmentId}`);
+            try {
+                // Sunucuya DELETE isteği at
+                const response = await fetch(`${API_BASE_URL}/assignments/${assignmentId}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Sunucu ödevi silemedi.');
+                }
+                
+                console.log("Ödev sunucudan silindi.");
+                hideModal(deleteConfirmModal);
+                loadData(); // Arayüzü güncelle
+            } catch (error) {
+                console.error("Ödev silme hatası: ", error);
+            }
+        }
+
+        // (Öğrenci) Ödev Teslim Et
+        async function handleSubmitAssignment(e) {
+            e.preventDefault();
+            const assignmentId = e.target.dataset.assignmentId;
+            const studentName = document.getElementById('student-name').value;
+            const submissionLink = document.getElementById('submission-link').value;
+            
+            const submitBtn = document.getElementById('submit-assignment-btn');
+
+            if (!assignmentId || !studentName || !submissionLink) return;
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Gönderiliyor...';
+
+            try {
+                // Sunucuya POST isteği at, link teslimatını gönder
+                const response = await fetch(`${API_BASE_URL}/submissions`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        assignmentId: assignmentId,
+                        studentName: studentName,
+                        submissionLink: submissionLink
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error('Sunucu teslimatı kabul etmedi.');
+                }
+
+                console.log("Ödev teslim edildi.");
+                hideModal(submitAssignmentModal);
+                e.target.reset();
+                loadData(); // Arayüzü güncelle
+            } catch (error) {
+                console.error("Ödev teslim etme hatası: ", error);
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Teslim Et';
+            }
+        }
+
+
+        // --- Sayfa Yüklendiğinde Başlat ---
+        window.onload = () => {
+            // Firebase init() yerine direkt loadData() ve setupEventListeners()
+            loadData();
+            setupEventListeners();
+        };
+
+    </script>
+</body>
+</html>
